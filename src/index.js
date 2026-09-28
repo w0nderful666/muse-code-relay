@@ -146,7 +146,7 @@ async function handle(request, env) {
       AND COALESCE((SELECT draws FROM daily_quota WHERE actor_hash=?2 AND day=?7),0)<${MAX_DAILY_CLAIMS}
       AND NOT EXISTS (SELECT 1 FROM claims c WHERE c.invite_id=i.id AND c.actor_hash=?2)
       AND i.claim_count<${drawCap} AND i.milestone_at IS NULL AND i.copy_count<${COPY_MILESTONE}
-      ORDER BY i.success_count DESC, i.failure_count ASC, random() LIMIT 1
+      ORDER BY (i.success_count - i.failure_count) * 0.05 + random() LIMIT 1
       RETURNING invite_id,(SELECT code FROM invites WHERE id=claims.invite_id) AS code`).bind(id, actor, receiptHash, now, PLATFORM.id, preferred, utcDayStart(now)).first();
     if (!row) {
       const count = await env.DB.prepare('SELECT draws FROM daily_quota WHERE actor_hash=? AND day=?').bind(actor, utcDayStart(now)).first();

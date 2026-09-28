@@ -20,16 +20,14 @@ WHERE i.platform = ?
   AND i.claim_count < 60
   AND NOT EXISTS (                 -- you can never draw the same code twice
     SELECT 1 FROM claims c WHERE c.invite_id = i.id AND c.actor_hash = ?)
-ORDER BY i.success_count DESC,     -- codes people rated "works" go first
-         i.failure_count ASC,      -- codes people rated "broken" sink
-         random()                  -- everything else is uniform random
+ORDER BY (i.success_count - i.failure_count) * 0.05 + random()  -- net positive votes add a slight edge; the rest is uniform random
 LIMIT 1;
 ```
 
 Why this is fair:
 
 - **Same rule for every code.** There is no allowlist, no priority flag, no admin override in the draw path. A code submitted by the operator goes through the exact same query.
-- **Merit is earned, not assigned.** `success_count` only grows when a real drawer clicks "copy" and then reports "works". One draw = one vote max.
+- **Merit nudges, never dictates.** Each net positive vote (works − broken) adds a 0.05 edge on top of uniform randomness — a code rated +2 wins roughly 3 in 5 matchups instead of 1 in 2. Votes are earned: `success_count` only grows when a real drawer clicks "copy" and reports "works", one vote per draw max.
 - **Bad codes remove themselves.** Three "broken" reports from three different drawers automatically pause a code (`ACTIVE` → `PAUSED`). Pause is reversible by the admin; it never deletes data.
 - **Atomic.** The pick, the claim, and the counter increments happen inside single statements and triggers, so two simultaneous draws cannot double-count the 30th copy.
 - **Anonymous.** IPs are HMAC-hashed with a server-side secret before storage. The operator sees tallies, not people.
