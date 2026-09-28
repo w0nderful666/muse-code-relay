@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="下一位：一个邀请码，一次交接。分享闲置邀请码，领取社区提供的邀请码。">
+  <meta name="theme-color" content="#172733">
+  <title>下一位 · 邀请码接力站</title>
+  <link rel="icon" type="image/svg+xml" href="/mark.svg">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/relay.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="site-shell">
+    <aside class="rail" aria-label="站点导航与概况">
+      <a class="identity" href="/"><span class="identity-mark" aria-hidden="true"><i></i><i></i></span><span>下一位<small>INVITE RELAY</small></span></a>
+      <nav class="rail-nav" aria-label="页面导航"><a href="#receive"><span>01</span>领取</a><a href="#offer"><span>02</span>分享</a><a href="#board"><span>03</span>公开清单</a><a href="#my-relay"><span>04</span>我的接力</a></nav>
+      <div class="rail-bottom"><p>接力概况 <span class="live-dot" aria-hidden="true"></span></p><dl class="rail-stats"><div><dt>可领取</dt><dd id="available">—</dd></div><div><dt>今日领取</dt><dd id="today-claims">—</dd></div><div><dt>今日新增</dt><dd id="today-submitted">—</dd></div></dl><span class="rail-caption">数据按 UTC 日期统计</span></div>
+    </aside>
+    <main class="main-content">
+      <div class="topline"><span>COMMUNITY DESK / MUSE</span></div>
+      <header class="masthead"><p class="overline">一个邀请码，一次交接</p><h1>把机会递给<br><em>下一位。</em></h1><p>这里收集社区成员愿意分享的邀请码。你可以领走一个；如果手上有闲置的，也可以放进清单。</p></header>
+      <section id="receive" class="receive-panel" aria-labelledby="receive-heading">
+        <div class="section-index">01 <span>/</span> 领取</div>
+        <div class="receive-content"><div><h2 id="receive-heading">现在领取</h2><p>系统从可用清单中挑选一个码。用过之后，留下一次有效性反馈即可。</p></div><div class="receive-action"><div id="claim-turnstile"></div><button id="claim-button" type="button">取一个邀请码 <span aria-hidden="true">↗</span></button><p class="message" id="claim-message" role="status"></p></div></div>
+        <div id="claim-result" class="claim-result" hidden><div><span class="result-label">本次领取</span><div class="code-line"><code id="claimed-code"></code><button id="copy-button" type="button" class="small secondary">复制</button></div></div><div class="result-feedback"><p>这个码能用吗？</p><p class="feedback-hint" id="feedback-hint">请先点击「复制」按钮，然后再反馈。</p><div class="feedback-actions"><button type="button" data-feedback="success" class="small">可以使用</button><button type="button" data-feedback="failure" class="small secondary">无法使用</button></div></div></div>
+      </section>
+      <section class="relay-ledger" aria-label="匿名接力统计">
+        <div class="ledger-title"><span class="overline">THE RELAY LEDGER</span><h2>每一次交接，<br>都有回响。</h2></div>
+        <dl><div><dt>累计去重复制</dt><dd><strong id="total-copies">—</strong><span> 次</span></dd></div><div><dt>30 次接力达标</dt><dd><strong id="total-milestones">—</strong><span> 轮</span></dd></div></dl>
+        <p>另有 <strong id="total-positive">—</strong> 次有效反馈。复制数不代表注册或邀请任务完成人数。</p>
+      </section>
+      <section id="offer" class="offer-panel" aria-labelledby="offer-heading"><div class="section-index">02 <span>/</span> 分享</div><div class="offer-grid"><div><h2 id="offer-heading">手上有多余的码？</h2><p>提交后会进入共享清单。不用注册，输入邀请码就能回来查看接力进度。</p><div class="fine-print">支持 Muse 的 6 位字母或数字邀请码，保留大小写。请确认它允许多人使用及公开分享。</div></div><div class="offer-form-wrap"><form id="submit-form"><label for="code">邀请码</label><div class="input-row"><input id="code" name="code" autocomplete="off" inputmode="text" maxlength="6" pattern="[A-Za-z0-9]{6}" placeholder="例如 AbC123" required><button type="submit">放入清单 <span aria-hidden="true">→</span></button></div><div id="submit-turnstile"></div></form><p class="message" id="submit-message" role="status"></p>
+      </div></div></section>
+      <section id="board" class="board-panel" aria-labelledby="board-heading"><div class="board-heading"><div><div class="section-index">03 <span>/</span> 公开清单</div><h2 id="board-heading">目前在列</h2></div><p>这里只展示前两位。完整邀请码在领取后显示。</p></div><div class="board-labels" aria-hidden="true"><span>序号</span><span>邀请码</span><span>状态</span></div><div id="invite-list" class="invite-list" aria-live="polite">正在读取清单…</div></section>
+      <section id="my-relay" class="progress-panel" aria-labelledby="progress-heading"><div class="section-index">04 <span>/</span> 我的接力</div><div class="progress-layout"><div><h2 id="progress-heading">看看它走了多远。</h2><p>输入邀请码即可查看进度，数据实时更新，每次查询都是最新。</p><p class="privacy-note">达到 30 次后，本次成绩单显示完成即清理该码和领取明细。未查看的成绩单保留 <span id="retention-hours">48</span> 小时，到期自动清理；只留下匿名累计数字。</p></div><form id="progress-form"><label for="lookup-code">邀请码</label><input id="lookup-code" maxlength="6" pattern="[A-Za-z0-9]{6}" required autocomplete="off"><button type="submit">查看接力进度 <span aria-hidden="true">↗</span></button><p id="progress-message" class="message" role="status"></p></form></div>
+        <div id="progress-result" class="progress-result" hidden><div class="progress-result-heading"><span id="progress-kind" class="overline"></span><strong id="progress-preview"></strong></div><div class="progress-score"><strong id="progress-copies">0</strong><span>/ 30 次去重复制</span></div><progress id="progress-bar" value="0" max="30" aria-label="30次复制里程碑进度"></progress><p id="progress-details"></p><p id="progress-timing"></p><p id="deletion-status" role="status"></p><div class="receipt-actions"><button id="save-report" type="button" class="small secondary">保存这份成绩单</button><button id="retry-delete" type="button" class="small" hidden>重试清理明细</button></div></div>
+      </section>
+      <footer><p>请自行核实邀请码是否适用；平台的使用条件和有效期可能变化。清单内容来自站点访客。</p><span>下一位 / COMMUNITY INVITE RELAY</span></footer>
+    </main>
+  </div>
+</body>
+</html>
