@@ -74,6 +74,7 @@ async function handle(request, env) {
   const path = url.pathname;
   const method = request.method;
   const drawCap = Math.min(1000, Math.max(1, Number.parseInt(env.DRAW_CAP_PER_CODE || '60', 10) || 60));
+  const MAX_POOL = Math.min(10000, Math.max(1, Number.parseInt(env.RELAY_MAX_POOL || '100', 10) || 100));
   if (!env.DB || !env.HASH_SECRET || !env.ADMIN_TOKEN || env.HASH_SECRET.length < 24 || env.ADMIN_TOKEN.length < 24)
     return fail('SETUP_REQUIRED', '请先配置 D1 和两个长度至少 24 字符的密钥。', 503);
 
@@ -122,6 +123,8 @@ async function handle(request, env) {
     if (!await verifyTurnstile(request, env, input.challenge_token, 'submit')) return fail('HUMAN_CHECK', '人机验证失败，请重试。', 403);
     const now = Date.now();
     const codeHash = await hmac(env.HASH_SECRET, 'code:' + PLATFORM.id + ':' + code);
+    const poolSize = await env.DB.prepare(`SELECT COUNT(*) AS n FROM invites WHERE platform=? AND status='ACTIVE'`).bind(PLATFORM.id).first();
+    if ((poolSize?.n || 0) >= MAX_POOL) return fail('POOL_FULL', `The pool is full (${MAX_POOL} codes); try again after older codes graduate or expire.`, 429, { 'retry-after': '3600' });
     const result = await env.DB.prepare(`INSERT OR IGNORE INTO invites(platform,code,code_hash,submitted_by,created_at)
       SELECT ?1,?2,?3,?4,?5 WHERE COALESCE((SELECT submissions FROM daily_quota WHERE actor_hash=?4 AND day=?6),0)<${MAX_DAILY_SUBMISSIONS}
       RETURNING id`).bind(PLATFORM.id, code, codeHash, actor, now, utcDayStart(now)).first();
@@ -146,7 +149,55 @@ async function handle(request, env) {
       AND COALESCE((SELECT draws FROM daily_quota WHERE actor_hash=?2 AND day=?7),0)<${MAX_DAILY_CLAIMS}
       AND NOT EXISTS (SELECT 1 FROM claims c WHERE c.invite_id=i.id AND c.actor_hash=?2)
       AND i.claim_count<${drawCap} AND i.milestone_at IS NULL AND i.copy_count<${COPY_MILESTONE}
-      ORDER BY (i.success_count - i.failure_count) * 0.05 + random() LIMIT 1
+      ORDER BY (
+        -- random strictly in [0, 1)
+        ((random() & 9007199254740991) / 9007199254740992.0)
+        -- approval rate: 0.5 when no feedback yet
+        + 0.30 * COALESCE(
+            COALESCE(i.success_count, 0) * 1.0
+            / NULLIF(
+                COALESCE(i.success_count, 0)
+                + COALESCE(i.failure_count, 0),
+                0
+              ),
+            0.5
+          )
+        -- queue rank among ACTIVE codes of the platform: oldest = 1, newest = 0
+        + 0.25 * COALESCE(
+            1.0 * (
+              SELECT COUNT(*)
+              FROM invites q
+              WHERE q.platform = i.platform
+                AND q.status = 'ACTIVE'
+                AND (
+                  COALESCE(q.created_at, ?4)
+                    > COALESCE(i.created_at, ?4)
+                  OR (
+                    COALESCE(q.created_at, ?4)
+                      = COALESCE(i.created_at, ?4)
+                    AND q.id > i.id
+                  )
+                )
+            )
+            / NULLIF(
+                (
+                  SELECT COUNT(*)
+                  FROM invites q
+                  WHERE q.platform = i.platform
+                    AND q.status = 'ACTIVE'
+                ) - 1,
+                0
+              ),
+            1.0
+          )
+        -- new-code boost for the first 24h
+        + CASE
+            WHEN i.created_at > ?4 - 86400000 THEN 0.15
+            ELSE 0.0
+          END
+        -- small penalty for the first four "broken" reports
+        - 0.05 * MIN(COALESCE(i.failure_count, 0), 4)
+      ) DESC LIMIT 1
       RETURNING invite_id,(SELECT code FROM invites WHERE id=claims.invite_id) AS code`).bind(id, actor, receiptHash, now, PLATFORM.id, preferred, utcDayStart(now)).first();
     if (!row) {
       const count = await env.DB.prepare('SELECT draws FROM daily_quota WHERE actor_hash=? AND day=?').bind(actor, utcDayStart(now)).first();
@@ -264,6 +315,8 @@ export default {
     const now = controller.scheduledTime;
     await env.DB.batch([
       env.DB.prepare('DELETE FROM invites WHERE milestone_at IS NOT NULL AND milestone_at<=?').bind(now-retentionMs(env)),
+      // 14-day expiry: expired codes leave the pool but keep queryable progress
+      env.DB.prepare(`UPDATE invites SET status='REMOVED' WHERE status IN ('ACTIVE','PAUSED') AND created_at < ?`).bind(now - 14 * DAY),
       env.DB.prepare('DELETE FROM daily_quota WHERE day<?').bind(utcDayStart(now)),
       env.DB.prepare('DELETE FROM relay_daily WHERE day<?').bind(utcDayStart(now)-31*DAY)
     ]);

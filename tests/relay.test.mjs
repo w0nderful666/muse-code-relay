@@ -8,7 +8,7 @@ import worker from '../src/index.js';
 function setup() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec('PRAGMA foreign_keys=ON');
-  for (const name of ['0001_init.sql', '0002_relay_metrics.sql', '0003_progress_queries.sql', '0004_pause_threshold.sql', '0005_draw_counts_as_copy.sql']) sqlite.exec(readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8'));
+  for (const name of ['0001_init.sql', '0002_relay_metrics.sql', '0003_progress_queries.sql', '0004_pause_threshold.sql', '0005_draw_counts_as_copy.sql', '0006_pause_threshold_5.sql']) sqlite.exec(readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8'));
   const prepare = (sql, values = []) => ({
     bind(...args) { return prepare(sql, args); },
     async first() { return sqlite.prepare(sql).get(...values) || null; },
@@ -70,15 +70,15 @@ test('draw counts as a copy; feedback requires copy-button confirmation', async 
   assert.equal(live.result.copies, 1); assert.equal(live.result.positive_reports, 1);
 });
 
-test('auto-pause needs three failure reports; paused codes stop being drawn', async () => {
+test('auto-pause needs five failure reports; paused codes stop being drawn', async () => {
   const t = setup(); const id = await t.share();
-  for (const actor of ['voter-a', 'voter-b', 'voter-c']) {
+  for (const actor of ['voter-a', 'voter-b', 'voter-c', 'voter-d', 'voter-e']) {
     const claim = await t.draw(id, actor);
     assert.equal((await t.copy(claim, actor)).result.confirmed, true);
     assert.equal((await t.api('/api/report', { entry_id: id, receipt: claim.receipt, outcome: 'failure' }, actor)).status, 200);
     const row = t.sqlite.prepare('SELECT status,failure_count FROM invites WHERE id=?').get(id);
-    if (actor === 'voter-c') { assert.equal(row.status, 'PAUSED'); assert.equal(row.failure_count, 3); }
-    else assert.equal(row.status, 'ACTIVE', 'Two failure reports must not pause the code');
+    if (actor === 'voter-e') { assert.equal(row.status, 'PAUSED'); assert.equal(row.failure_count, 5); }
+    else assert.equal(row.status, 'ACTIVE', 'Fewer than five failure reports must not pause the code');
   }
   assert.equal((await t.api('/api/draw', {}, 'latecomer')).status, 404, 'Paused codes are not drawn');
 });
